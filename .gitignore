@@ -1,0 +1,15 @@
+__pycache__/
+venv
+dist
+.mypy_cache
+.pytest_cache
+.idea
+.postgres
+local.env
+*.env
+/logfile
+GIT_SHA
+build
+database
+*.db
+.DS_Store
