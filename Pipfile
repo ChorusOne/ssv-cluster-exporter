@@ -16,6 +16,9 @@ pydantic-settings = "*"
 pytest = "*"
 mypy = "*"
 pytest-asyncio = "*"
+types-pyyaml = "*"
+flake8 = "*"
+black = "*"
 
 [requires]
 python_version = "3.12"

@@ -1,6 +1,6 @@
-import asyncio
 from collections.abc import AsyncGenerator
 import socket
+import typing
 
 from aiohttp import client, web
 from prometheus_client.parser import text_string_to_metric_families
@@ -10,14 +10,14 @@ import pytest_asyncio
 import ssv_cluster_exporter
 
 
-def find_free_port():
+def find_free_port() -> int:
     with socket.socket() as s:
         s.bind(("", 0))
-        return s.getsockname()[1]
+        return int(s.getsockname()[1])
 
 
 @pytest_asyncio.fixture
-async def metrics_server(exporter_data: dict) -> AsyncGenerator[str, None]:
+async def metrics_server(exporter_data: typing.Any) -> AsyncGenerator[str, None]:
     exporter_data["session"] = client.ClientSession()
     exporter = ssv_cluster_exporter.SSVClusterExporter(**exporter_data)
     port = find_free_port()
@@ -56,7 +56,7 @@ async def metrics_server(exporter_data: dict) -> AsyncGenerator[str, None]:
         },
     ],
 )
-async def test_metrics(metrics_server: str):
+async def test_metrics(metrics_server: str) -> None:
     session = client.ClientSession()
     response = await session.get(f"{metrics_server}/metrics")
     assert response.status == 200
@@ -66,7 +66,7 @@ async def test_metrics(metrics_server: str):
             sample = metric.samples[0]
             assert (
                 sample.labels["cluster_id"]
-                == "0xde12c5ce1bc895c3ed8b81afcbbb55b3efff7ae9ebac5dbd2ebac3bd29474c09"
+                == "0xde12c5ce1bc895c3ed8b81afcbbb55b3efff7ae9ebac5dbd2ebac3bd29474c09"  # noqa: W503
             )
             assert sample.labels["id"] == "1278541"
             assert sample.labels["network"] == "holesky"

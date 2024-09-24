@@ -6,10 +6,9 @@ import logging
 import pathlib
 import sys
 import typing
-import urllib.parse
 
 from aiohttp import client, web
-import furl
+import furl  # type: ignore[import-untyped]
 from prometheus_async import aio
 from prometheus_client import Gauge
 from pydantic import BaseModel
@@ -64,7 +63,7 @@ class SupportedNetworks(str, enum.Enum):
     MAINNET = "mainnet"
     HOLESKY = "holesky"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.value
 
 
@@ -131,10 +130,10 @@ class SSVClusterExporter(BaseSettings):
     stopping: bool = False
     stopped: asyncio.Event = asyncio.Event()
 
-    async def sleep(self):
+    async def sleep(self) -> None:
         await asyncio.sleep(self.interval_ms / 1000)
 
-    async def request(self, uri, **params) -> dict[typing.Any]:
+    async def request(self, uri: str, **params: str) -> typing.Any:
         """Perform request to SSV API server and handle all kinds of errors."""
         url = copy.deepcopy(self.base_url).join(uri)
         url.args.update(params)
@@ -148,7 +147,7 @@ class SSVClusterExporter(BaseSettings):
                     "Accept": "application/json",
                 },
             )
-        except (client.ClientError, OSError) as exc:
+        except (client.ClientError, OSError):
             logger.exception("Failed requesting SSV API Url %s", url)
             raise SSVAPIError("Client HTTP interaction error")
         else:
@@ -156,7 +155,7 @@ class SSVClusterExporter(BaseSettings):
                 raise SSVAPIError("Non-200 SSV API response code: %s", response.status)
             try:
                 response_data = await response.json()
-            except (client.ClientError, OSError) as exc:
+            except (client.ClientError, OSError):
                 logger.exception("Failed retrieving response data from SSV API")
                 raise SSVAPIError("Client data reading error")
             else:
@@ -186,7 +185,9 @@ class SSVClusterExporter(BaseSettings):
         clusters = []
         logger.info("Checking owner %s", owner)
         try:
-            response_json = await self.request(f"{network}/clusters/owner/{owner}")
+            response_json = await self.request(
+                f"{network}/clusters/owner/{owner}", page=str(page)
+            )
         except SSVAPIError:
             logger.exception(
                 "Failed to retrieve information about clusters for owner %s", owner
@@ -233,7 +234,7 @@ class SSVClusterExporter(BaseSettings):
 
         return clusters
 
-    def update_metrics(self, *clusters: list[SSVCluster]):
+    def update_metrics(self, *clusters: SSVCluster) -> None:
         """Update metrics for Prometheus consumption."""
         for cluster in clusters:
             labels = [
@@ -248,7 +249,7 @@ class SSVClusterExporter(BaseSettings):
             ssv_cluster_network_fee.labels(*labels).set(cluster.current_network_fee())
             ssv_cluster_validators_count.labels(*labels).set(cluster.validatorCount)
 
-    async def tick(self):
+    async def tick(self) -> None:
         """Perform single data retrieval and metrics update."""
         try:
             clusters = await self.clusters_info()
@@ -256,7 +257,7 @@ class SSVClusterExporter(BaseSettings):
         except Exception:
             logger.exception("Failed to update cluster details")
 
-    async def loop(self):
+    async def loop(self) -> None:
         """Infinite loop that spawns checker tasks."""
         while not self.stopping:
             asyncio.ensure_future(self.tick())
@@ -274,7 +275,7 @@ def get_application() -> web.Application:
 
 # #############
 # Entry point
-def main():
+def main() -> None:
     args = arg_parser.parse_args()
 
     if not args.config_file.exists():
