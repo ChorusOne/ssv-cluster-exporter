@@ -53,7 +53,7 @@ arg_parser.add_argument(
     "-H", "--host", default="127.0.0.1", help="Listen on this host."
 )
 arg_parser.add_argument(
-    "-P", "--port", type=str, default=29339, help="Listen on this port."
+    "-P", "--port", type=int, default=29339, help="Listen on this port."
 )
 
 
