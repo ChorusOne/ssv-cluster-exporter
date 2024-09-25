@@ -40,6 +40,28 @@ Dimensions:
  - `state` one of `active`, `inactive`, `liquidated`
  - `operators` comma separated list of cluster operators integer identifiers in SSV system
 
+----------
+
+`ssv_network_fee` -- current SSV network fee as described in [https://docs.ssv.network/learn/protocol-overview/tokenomics/fees#k4tw9to38r3v](SSV tokenomics docs)
+
+Dimensions:
+ - `network` one of `mainnet`, `holesky`
+
+----------
+
+`ssv_minimum_liquidation_collateral` -- current SSV minimum liquidation collateral as described in [https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#minimum-liquidation-collateral](SSV tokenomics docs)
+
+Dimensions:
+ - `network` one of `mainnet`, `holesky`
+
+
+----------
+
+`ssv_liquidation_threshold_period` -- current SSV liquidation threshold period as described in [https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#liquidation-threshold-period](SSV tokenomics docs)
+
+Dimensions:
+ - `network` one of `mainnet`, `holesky`
+
 
 
 Installation

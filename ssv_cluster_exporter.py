@@ -101,6 +101,23 @@ ssv_cluster_validators_count = Gauge(
 )
 
 
+ssv_network_fee = Gauge(
+    name="ssv_network_fee",
+    documentation="Current SSV network fee in SSV tokens",
+    labelnames=["network"],
+)
+ssv_minimum_liquidation_collateral = Gauge(
+    name="ssv_minimum_liquidation_collateral",
+    documentation="Current minimum liquidation collateral for SSV network",
+    labelnames=["network"],
+)
+ssv_liquidation_threshold_period = Gauge(
+    name="ssv_liquidation_threshold_period",
+    documentation="SSV liquidation threshold period, number of blocks that should be always funded",
+    labelnames=["network"],
+)
+
+
 # #############
 # Command line
 logger = logging.getLogger(__name__)
@@ -185,8 +202,49 @@ SSVNetworkViewsCallArgs = typing.Tuple[
 ]
 
 
+class SSVNetworkProperties(BaseModel):
+
+    network_fee: int
+    minimum_liquidation_collateral: int
+    liquidation_threshold_period: int
+
+
+class SSVNetworkContract(BaseModel):
+    """A facade for web3 contract data retrieval for network wide values."""
+
+    network_views: AsyncContract
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    async def fetch_network_fee(self) -> int:
+        return int(await self.network_views.functions.getNetworkFee().call())
+
+    async def fetch_minimum_liquidation_collateral(self) -> int:
+        return int(
+            await self.network_views.functions.getMinimumLiquidationCollateral().call()
+        )
+
+    async def fetch_liquidation_threshold_period(self) -> int:
+        return int(
+            await self.network_views.functions.getLiquidationThresholdPeriod().call()
+        )
+
+    async def fetch_all(self) -> SSVNetworkProperties:
+        (n_f, m_l_c, l_t_p) = await asyncio.gather(
+            self.fetch_network_fee(),
+            self.fetch_minimum_liquidation_collateral(),
+            self.fetch_liquidation_threshold_period(),
+        )
+        return SSVNetworkProperties(
+            network_fee=n_f,
+            minimum_liquidation_collateral=m_l_c,
+            liquidation_threshold_period=l_t_p,
+        )
+
+
 class SSVClusterContract(BaseModel):
-    """A facade for web3 contract data retrieval."""
+    """A facade for web3 contract data retrieval for clusters."""
 
     network_views: AsyncContract
     clusters: set[SSVCluster]
@@ -348,8 +406,8 @@ class SSVClusterExporter(BaseSettings):
 
         return clusters
 
-    def update_metrics(self, *clusters: SSVCluster) -> None:
-        """Update metrics for Prometheus consumption."""
+    def update_clusters_metrics(self, *clusters: SSVCluster) -> None:
+        """Update cluster related metrics for Prometheus consumption."""
         for cluster in clusters:
             labels = [
                 cluster.clusterId,
@@ -365,15 +423,38 @@ class SSVClusterExporter(BaseSettings):
             )
             ssv_cluster_validators_count.labels(*labels).set(cluster.validatorCount)
 
+    def update_network_metrics(self, network_properties: SSVNetworkProperties) -> None:
+        """Update network-wide metrics with value retrieven from contract."""
+        ssv_network_fee.labels(self.network).set(network_properties.network_fee)
+        ssv_liquidation_threshold_period.labels(self.network).set(
+            network_properties.liquidation_threshold_period
+        )
+        ssv_minimum_liquidation_collateral.labels(self.network).set(
+            network_properties.minimum_liquidation_collateral
+        )
+
+    async def clusters_updates(self) -> None:
+        """Run cluster-specific metrics update."""
+        clusters = set(await self.fetch_clusters_info())
+        latest_metric_fetcher = SSVClusterContract(
+            network_views=self.network_views, clusters=clusters
+        )
+        await latest_metric_fetcher.fetch_all()
+        self.update_clusters_metrics(*clusters)
+
+    async def network_updates(self) -> None:
+        """Run network-wide metrics update."""
+        network_metric_fetcher = SSVNetworkContract(network_views=self.network_views)
+        network_properties = await network_metric_fetcher.fetch_all()
+        self.update_network_metrics(network_properties)
+
     async def tick(self) -> None:
         """Perform single data retrieval and metrics update."""
         try:
-            clusters = set(await self.fetch_clusters_info())
-            latest_metric_fetcher = SSVClusterContract(
-                network_views=self.network_views, clusters=clusters
+            await asyncio.gather(
+                self.clusters_updates(),
+                self.network_updates(),
             )
-            await latest_metric_fetcher.fetch_all()
-            self.update_metrics(*clusters)
         except Exception:
             logger.exception("Failed to update cluster details")
 
