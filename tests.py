@@ -77,8 +77,19 @@ async def test_metrics(metrics_server: str) -> None:
                 sample.labels["owner"] == "0xD4BB555d3B0D7fF17c606161B44E372689C14F4B"
             )
             matched_metrics.add(metric.name)
+        elif metric.name in (
+            "ssv_network_fee",
+            "ssv_minimum_liquidation_collateral",
+            "ssv_liquidation_threshold_period",
+        ):
+            sample = metric.samples[0]
+            assert sample.labels["network"] == "holesky"
+            matched_metrics.add(metric.name)
     assert matched_metrics == {
         "ssv_cluster_validators_count",
         "ssv_cluster_balance",
         "ssv_cluster_burn_rate",
+        "ssv_network_fee",
+        "ssv_minimum_liquidation_collateral",
+        "ssv_liquidation_threshold_period",
     }
