@@ -34,14 +34,12 @@ class SupportedNetworks(str, enum.Enum):
 
     def ssv_network_views_contract(self) -> str:
         # See https://docs.ssv.network/developers/smart-contracts
-        if self is self.MAINNET:
-            return "0xafE830B6Ee262ba11cce5F32fDCd760FFE6a66e4"
-        elif self is self.HOLESKY:
-            return "0x352A18AEe90cdcd825d1E37d9939dCA86C00e281"
-        else:
-            raise RuntimeError(
-                "Do not know SSV network views contract for this network"
-            )
+        match self.value:
+            case SupportedNetworks.HOLESKY:
+                return "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"
+            case SupportedNetworks.MAINNET:
+                return "0xafE830B6Ee262ba11cce5F32fDCd760FFE6a66e4"
+        raise RuntimeError("Can not derive SSV network views address for network")
 
 
 # ###################
@@ -70,11 +68,7 @@ def get_ssv_network_views_contract(
     web3: Web3, network: SupportedNetworks
 ) -> AsyncContract:
     abi = get_ssv_network_views_contract_abi()
-    match network:
-        case SupportedNetworks.HOLESKY:
-            address = "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"
-        case SupportedNetworks.MAINNET:
-            address = "0xafE830B6Ee262ba11cce5F32fDCd760FFE6a66e4"
+    address = network.ssv_network_views_contract()
     contract: AsyncContract = web3.eth.contract(address=address, abi=abi)  # type: ignore[call-overload]
     return contract
 
