@@ -42,14 +42,14 @@ Dimensions:
 
 ----------
 
-`ssv_network_fee` -- current SSV network fee as described in [https://docs.ssv.network/learn/protocol-overview/tokenomics/fees#k4tw9to38r3v](SSV tokenomics docs)
+`ssv_network_fee` -- current SSV [network fee](https://docs.ssv.network/learn/protocol-overview/tokenomics/fees#k4tw9to38r3v)
 
 Dimensions:
  - `network` one of `mainnet`, `holesky`
 
 ----------
 
-`ssv_minimum_liquidation_collateral` -- current SSV minimum liquidation collateral as described in [https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#minimum-liquidation-collateral](SSV tokenomics docs)
+`ssv_minimum_liquidation_collateral` -- current SSV [minimum liquidation collateral](https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#minimum-liquidation-collateral) 
 
 Dimensions:
  - `network` one of `mainnet`, `holesky`
@@ -57,7 +57,7 @@ Dimensions:
 
 ----------
 
-`ssv_liquidation_threshold_period` -- current SSV liquidation threshold period as described in [https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#liquidation-threshold-period](SSV tokenomics docs)
+`ssv_liquidation_threshold_period` -- current SSV [liquidation threshold period](https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#liquidation-threshold-period)
 
 Dimensions:
  - `network` one of `mainnet`, `holesky`
