@@ -18,7 +18,7 @@ Dimensions:
 
 ----------
 
-`ssv_cluster_network_fee_index` -- current [network fee index](https://docs.ssv.network/learn/protocol-overview/tokenomics/payments) of a cluster in SSV system
+`ssv_cluster_burn_rate` -- current [burn rate](https://docs.ssv.network/learn/protocol-overview/tokenomics/liquidations#burn-rate) of a cluster in SSV system
 
 Dimensions:
  - `cluster_id` an unique 0x-prefixed hex identifier of the cluster in SSV system
@@ -60,10 +60,11 @@ Exporter accepts single positional parameter `config_file` which is a location
 of YAML config file. The YAML file accepts following parameters:
 
 - `interval_ms` -- interval in milliseconds of checking SSV API
-- `clusters` -- list of clusters, every cluster should have `network` and `cluster_id` properties
-- `owners` -- list of owner addresses, every owner should have `network` and `address` properties
+- `ethereum_rpc` -- address of Ethereum JSON-RPC endpoint to use for calling contracts
+- `network` -- this should be either `mainnet` or `holesky`
+- `clusters` -- list of clusters, every cluster should have `cluster_id` properties
+- `owners` -- list of owner addresses, every owner should have `address` properties
 
-- `network` property should be one of `mainnet` or `holesky`
 - `cluster_id` is an unique 0x-prefixed hex identifier of the cluster in SSV system
 - `address` is 0x-prefixed 40 letters Ethereum address value
 

@@ -37,19 +37,21 @@ async def metrics_server(exporter_data: typing.Any) -> AsyncGenerator[str, None]
     "exporter_data",
     [
         {
+            "network": "holesky",
+            "ethereum_rpc": "https://ethereum-holesky-rpc.publicnode.com",
             "owners": [
                 {
-                    "network": "holesky",
                     "address": "0xd4bb555d3b0d7ff17c606161b44e372689c14f4b",
                 }
             ],
             "clusters": [],
         },
         {
+            "network": "holesky",
+            "ethereum_rpc": "https://ethereum-holesky-rpc.publicnode.com",
             "owners": [],
             "clusters": [
                 {
-                    "network": "holesky",
                     "cluster_id": "0xde12c5ce1bc895c3ed8b81afcbbb55b3efff7ae9ebac5dbd2ebac3bd29474c09",
                 }
             ],
@@ -78,5 +80,5 @@ async def test_metrics(metrics_server: str) -> None:
     assert matched_metrics == {
         "ssv_cluster_validators_count",
         "ssv_cluster_balance",
-        "ssv_cluster_network_fee_index",
+        "ssv_cluster_burn_rate",
     }
