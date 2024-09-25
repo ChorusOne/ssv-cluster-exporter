@@ -11,6 +11,7 @@ pyyaml = "*"
 furl = "*"
 pydantic = "*"
 pydantic-settings = "*"
+web3 = "*"
 
 [dev-packages]
 pytest = "*"

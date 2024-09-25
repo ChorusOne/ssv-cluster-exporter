@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import copy
 import enum
+import json
 import logging
 import pathlib
 import sys
@@ -11,12 +12,74 @@ from aiohttp import client, web
 import furl  # type: ignore[import-untyped]
 from prometheus_async import aio
 from prometheus_client import Gauge
-from pydantic import BaseModel
+from pydantic import AfterValidator, BaseModel, computed_field
 from pydantic_settings import BaseSettings
 import yaml
-
+from web3 import Web3
+from web3.contract import AsyncContract
+from web3.eth import AsyncEth
+from web3.providers.rpc import AsyncHTTPProvider
 
 logger = logging.getLogger(__name__)
+
+
+# ############################
+# Supported Ethereum networks
+class SupportedNetworks(str, enum.Enum):
+    MAINNET = "mainnet"
+    HOLESKY = "holesky"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def ssv_network_views_contract(self) -> str:
+        # See https://docs.ssv.network/developers/smart-contracts
+        if self is self.MAINNET:
+            return "0xafE830B6Ee262ba11cce5F32fDCd760FFE6a66e4"
+        elif self is self.HOLESKY:
+            return "0x352A18AEe90cdcd825d1E37d9939dCA86C00e281"
+        else:
+            raise RuntimeError(
+                "Do not know SSV network views contract for this network"
+            )
+
+
+# ###################
+# Aiohttp & web3 apps
+def get_application() -> web.Application:
+    app = web.Application()
+    app.router.add_get("/metrics", aio.web.server_stats)
+    return app
+
+
+def get_web3_provider(ethereum_rpc_url: str) -> Web3:
+    return Web3(
+        provider=AsyncHTTPProvider(ethereum_rpc_url),  # type: ignore[arg-type]
+        modules={"eth": (AsyncEth,)},
+    )
+
+
+def get_ssv_network_views_contract_abi() -> typing.Any:
+    with open(
+        pathlib.Path(__file__).parent / "contract/SSVNetworkViews.json", "r"
+    ) as fl:
+        return json.loads(fl.read())
+
+
+def get_ssv_network_views_contract(
+    web3: Web3, network: SupportedNetworks
+) -> AsyncContract:
+    abi = get_ssv_network_views_contract_abi()
+    match network:
+        case SupportedNetworks.HOLESKY:
+            address = "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"
+        case SupportedNetworks.MAINNET:
+            address = "0xafE830B6Ee262ba11cce5F32fDCd760FFE6a66e4"
+    contract: AsyncContract = web3.eth.contract(address=address, abi=abi)  # type: ignore[call-overload]
+    return contract
+
+
+Web3RpcClient = typing.Annotated[str, AfterValidator(get_web3_provider)]
 
 
 # ########
@@ -26,9 +89,9 @@ ssv_cluster_balance = Gauge(
     documentation="Current balance for SSV cluster",
     labelnames=["cluster_id", "id", "owner", "network", "state", "operators"],
 )
-ssv_cluster_network_fee = Gauge(
-    name="ssv_cluster_network_fee_index",
-    documentation="SSV latest network fee index as reported for given cluster",
+ssv_cluster_burn_rate = Gauge(
+    name="ssv_cluster_burn_rate",
+    documentation="SSV cluster burn rate",
     labelnames=["cluster_id", "id", "owner", "network", "state", "operators"],
 )
 ssv_cluster_validators_count = Gauge(
@@ -44,7 +107,6 @@ logger = logging.getLogger(__name__)
 arg_parser = argparse.ArgumentParser("SSV Cluster Data Exporter for Prometheus.")
 arg_parser.add_argument(
     "config_file",
-    nargs="?",
     default="config.yml",
     help="Location of a config file.",
     type=pathlib.Path,
@@ -59,26 +121,16 @@ arg_parser.add_argument(
 
 # ###################
 # Settings and logic
-class SupportedNetworks(str, enum.Enum):
-    MAINNET = "mainnet"
-    HOLESKY = "holesky"
-
-    def __str__(self) -> str:
-        return self.value
-
-
 class ClusterConfig(BaseModel):
     """Cluster config for data retrieval."""
 
     cluster_id: str
-    network: SupportedNetworks
 
 
 class OwnerConfig(BaseModel):
     """Owner config for data retrieval."""
 
     address: str
-    network: SupportedNetworks
 
 
 class SSVCluster(BaseModel):
@@ -90,10 +142,15 @@ class SSVCluster(BaseModel):
     ownerAddress: str
     validatorCount: int
     networkFeeIndex: str
+    index: str
     balance: str
     active: bool
     isLiquidated: bool
     operators: list[int]
+
+    # Values received from the contract
+    latest_balance: int | None = None
+    latest_burn_rate: int | None = None
 
     def current_balance(self) -> int:
         return int(self.balance)
@@ -114,9 +171,72 @@ class SSVCluster(BaseModel):
     def operators_label(self) -> str:
         return ",".join(map(str, self.operators))
 
+    def __hash__(self) -> int:
+        """Deduplicate clusters by ID"""
+        return self.id
+
 
 class SSVAPIError(Exception):
     pass
+
+
+SSVNetworkViewsCallArgs = typing.Tuple[
+    str, tuple[int, ...], tuple[int, int, int, bool, int]
+]
+
+
+class SSVClusterContract(BaseModel):
+    """A facade for web3 contract data retrieval."""
+
+    network_views: AsyncContract
+    clusters: set[SSVCluster]
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def contract_call_args(self, cluster: SSVCluster) -> SSVNetworkViewsCallArgs:
+        return (
+            cluster.ownerAddress,
+            tuple(cluster.operators),
+            (
+                cluster.validatorCount,
+                int(cluster.networkFeeIndex),
+                int(cluster.index),
+                cluster.active,
+                cluster.current_balance(),
+            ),
+        )
+
+    async def get_cluster_balance(self, cluster: SSVCluster) -> None:
+        value = await self.network_views.functions.getBalance(
+            *self.contract_call_args(cluster)
+        ).call()
+        cluster.latest_balance = value
+
+    async def get_cluster_burn_rate(self, cluster: SSVCluster) -> None:
+        value = await self.network_views.functions.getBurnRate(
+            *self.contract_call_args(cluster)
+        ).call()
+        cluster.latest_burn_rate = value
+
+    async def fetch_balances(self) -> None:
+        futs = []
+        for cluster in self.clusters:
+            futs.append(asyncio.create_task(self.get_cluster_balance(cluster)))
+        await asyncio.gather(*futs)
+
+    async def fetch_burn_rates(self) -> None:
+        futs = []
+        for cluster in self.clusters:
+            futs.append(asyncio.create_task(self.get_cluster_burn_rate(cluster)))
+        await asyncio.gather(*futs)
+
+    async def fetch_all(self) -> None:
+        futs = [
+            self.fetch_balances(),
+            self.fetch_burn_rates(),
+        ]
+        await asyncio.gather(*futs)
 
 
 class SSVClusterExporter(BaseSettings):
@@ -125,17 +245,23 @@ class SSVClusterExporter(BaseSettings):
     interval_ms: int = 60000
     clusters: list[ClusterConfig]
     owners: list[OwnerConfig]
-    base_url: furl.furl = furl.furl("https://api.ssv.network/api/v4/")
+    network: SupportedNetworks
+    ethereum_rpc: Web3RpcClient
+    base_ssv_url: furl.furl = furl.furl("https://api.ssv.network/api/v4/")
+
     session: client.ClientSession
-    stopping: bool = False
-    stopped: asyncio.Event = asyncio.Event()
+
+    @computed_field  # type: ignore
+    @property
+    def network_views(self) -> AsyncContract:
+        return get_ssv_network_views_contract(self.ethereum_rpc, self.network)  # type: ignore[arg-type]
 
     async def sleep(self) -> None:
         await asyncio.sleep(self.interval_ms / 1000)
 
     async def request(self, uri: str, **params: str) -> typing.Any:
         """Perform request to SSV API server and handle all kinds of errors."""
-        url = copy.deepcopy(self.base_url).join(uri)
+        url = copy.deepcopy(self.base_ssv_url).join(uri)
         url.args.update(params)
         logger.info("Requesting SSV API Url: %s", url)
 
@@ -161,14 +287,12 @@ class SSVClusterExporter(BaseSettings):
             else:
                 return response_data
 
-    async def get_cluster_by_id(
-        self, network: SupportedNetworks, cluster_id: str
-    ) -> list[SSVCluster]:
+    async def get_cluster_by_id(self, cluster_id: str) -> list[SSVCluster]:
         """Given the previously known cluster id, retrieve information."""
         clusters = []
         logger.info("Checking cluster %s", cluster_id)
         try:
-            response_json = await self.request(f"{network}/clusters/{cluster_id}")
+            response_json = await self.request(f"{self.network}/clusters/{cluster_id}")
         except SSVAPIError:
             logger.exception("Failed to retrieve information for cluster %s:")
         else:
@@ -178,15 +302,13 @@ class SSVClusterExporter(BaseSettings):
                 logger.warning("No data recorded for cluster %s", cluster_id)
         return clusters
 
-    async def get_owner_clusters(
-        self, network: SupportedNetworks, owner: str, page: int = 1
-    ) -> list[SSVCluster]:
+    async def get_owner_clusters(self, owner: str, page: int = 1) -> list[SSVCluster]:
         """Dynamically discover SSV clusters for given owner address."""
         clusters = []
         logger.info("Checking owner %s", owner)
         try:
             response_json = await self.request(
-                f"{network}/clusters/owner/{owner}", page=str(page)
+                f"{self.network}/clusters/owner/{owner}", page=str(page)
             )
         except SSVAPIError:
             logger.exception(
@@ -201,31 +323,23 @@ class SSVClusterExporter(BaseSettings):
             if page == 1 and page < num_pages:
                 while page < num_pages:
                     page += 1
-                    next_page_clusters = await self.get_owner_clusters(
-                        network, owner, page
-                    )
+                    next_page_clusters = await self.get_owner_clusters(owner, page)
                     clusters += next_page_clusters
 
         return clusters
 
-    async def clusters_info(self) -> list[SSVCluster]:
+    async def fetch_clusters_info(self) -> list[SSVCluster]:
         """Given the clusters and owners lists, finds all the SSV clusters for them."""
         futs = []
         clusters = []
 
         for owner_config in self.owners:
             futs.append(
-                asyncio.create_task(
-                    self.get_owner_clusters(owner_config.network, owner_config.address)
-                )
+                asyncio.create_task(self.get_owner_clusters(owner_config.address))
             )
         for cluster_config in self.clusters:
             futs.append(
-                asyncio.create_task(
-                    self.get_cluster_by_id(
-                        cluster_config.network, cluster_config.cluster_id
-                    )
-                )
+                asyncio.create_task(self.get_cluster_by_id(cluster_config.cluster_id))
             )
 
         responses = await asyncio.gather(*futs)
@@ -245,32 +359,30 @@ class SSVClusterExporter(BaseSettings):
                 cluster.cluster_state(),
                 cluster.operators_label(),
             ]
-            ssv_cluster_balance.labels(*labels).set(cluster.current_balance())
-            ssv_cluster_network_fee.labels(*labels).set(cluster.current_network_fee())
+            ssv_cluster_balance.labels(*labels).set(float(cluster.latest_balance or 0))
+            ssv_cluster_burn_rate.labels(*labels).set(
+                float(cluster.latest_burn_rate or 0)
+            )
             ssv_cluster_validators_count.labels(*labels).set(cluster.validatorCount)
 
     async def tick(self) -> None:
         """Perform single data retrieval and metrics update."""
         try:
-            clusters = await self.clusters_info()
+            clusters = set(await self.fetch_clusters_info())
+            latest_metric_fetcher = SSVClusterContract(
+                network_views=self.network_views, clusters=clusters
+            )
+            await latest_metric_fetcher.fetch_all()
             self.update_metrics(*clusters)
         except Exception:
             logger.exception("Failed to update cluster details")
 
     async def loop(self) -> None:
         """Infinite loop that spawns checker tasks."""
-        while not self.stopping:
+        while True:
             asyncio.ensure_future(self.tick())
             await self.sleep()
         self.stopped.set()
-
-
-# ############
-# Aiohttp app
-def get_application() -> web.Application:
-    app = web.Application()
-    app.router.add_get("/metrics", aio.web.server_stats)
-    return app
 
 
 # #############
