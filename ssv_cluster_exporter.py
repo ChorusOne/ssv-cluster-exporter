@@ -14,11 +14,11 @@ from prometheus_async import aio
 from prometheus_client import Gauge
 from pydantic import AfterValidator, BaseModel, computed_field
 from pydantic_settings import BaseSettings
-import yaml
 from web3 import Web3
 from web3.contract import AsyncContract
 from web3.eth import AsyncEth
 from web3.providers.rpc import AsyncHTTPProvider
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,6 @@ ssv_liquidation_threshold_period = Gauge(
 
 # #############
 # Command line
-logger = logging.getLogger(__name__)
 arg_parser = argparse.ArgumentParser("SSV Cluster Data Exporter for Prometheus.")
 arg_parser.add_argument(
     "config_file",
@@ -188,15 +187,19 @@ class SSVCluster(BaseModel):
 
 
 class SSVAPIError(Exception):
+    """Error when communicating with SSV API."""
+
     pass
 
 
+# Common call arguments for cluster methods in SSVNetworkViews contract
 SSVNetworkViewsCallArgs = typing.Tuple[
     str, tuple[int, ...], tuple[int, int, int, bool, int]
 ]
 
 
 class SSVNetworkProperties(BaseModel):
+    """Network-wide tokenomics properties."""
 
     network_fee: int
     minimum_liquidation_collateral: int
