@@ -99,7 +99,7 @@ Running
 After creating config file, run application like
 
 ```bash
-pipenv run python3 ssv_cluster_exporter </path/to/config/file>
+pipenv run python3 ssv_cluster_exporter.py </path/to/config/file>
 ```
 
 By default, metrics will be available via http://127.0.0.1:29339/metrics URL.
