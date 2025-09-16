@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Supported Ethereum networks
 class SupportedNetworks(str, enum.Enum):
     MAINNET = "mainnet"
-    HOLESKY = "holesky"
+    HOODI = "hoodi"
 
     def __str__(self) -> str:
         return self.value
@@ -36,8 +36,8 @@ class SupportedNetworks(str, enum.Enum):
     def ssv_network_views_contract(self) -> str:
         # See https://docs.ssv.network/developers/smart-contracts
         match self.value:
-            case SupportedNetworks.HOLESKY:
-                return "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"
+            case SupportedNetworks.HOODI:
+                return "0x5AdDb3f1529C5ec70D77400499eE4bbF328368fe"
             case SupportedNetworks.MAINNET:
                 return "0xafE830B6Ee262ba11cce5F32fDCd760FFE6a66e4"
         raise RuntimeError("Can not derive SSV network views address for network")
@@ -165,7 +165,7 @@ class OwnerConfig(BaseModel):
 class SSVCluster(BaseModel):
     """Represents single SSV cluster retrieved over API."""
 
-    id: int
+    id: str
     clusterId: str
     network: SupportedNetworks
     ownerAddress: str
@@ -202,7 +202,7 @@ class SSVCluster(BaseModel):
 
     def __hash__(self) -> int:
         """Deduplicate clusters by ID"""
-        return self.id
+        return hash(self.id)
 
 
 class SSVAPIError(Exception):
@@ -395,8 +395,8 @@ class SSVClusterExporter(BaseSettings):
         except SSVAPIError:
             logger.exception("Failed to retrieve information for cluster %s:")
         else:
-            if response_json["data"]:
-                clusters.append(SSVCluster(**response_json["data"]))
+            if response_json.get("cluster"):
+                clusters.append(SSVCluster(**response_json["cluster"]))
             else:
                 logger.warning("No data recorded for cluster %s", cluster_id)
         return clusters
