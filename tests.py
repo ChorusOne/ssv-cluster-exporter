@@ -37,22 +37,22 @@ async def metrics_server(exporter_data: typing.Any) -> AsyncGenerator[str, None]
     "exporter_data",
     [
         {
-            "network": "holesky",
-            "ethereum_rpc": "https://ethereum-holesky-rpc.publicnode.com",
+            "network": "hoodi",
+            "ethereum_rpc": "https://ethereum-hoodi-rpc.publicnode.com/",
             "owners": [
                 {
-                    "address": "0xd4bb555d3b0d7ff17c606161b44e372689c14f4b",
+                    "address": "0x6f1Ae8C21e37034578A0252F7CC1b19DDe3472cb",
                 }
             ],
             "clusters": [],
         },
         {
-            "network": "holesky",
-            "ethereum_rpc": "https://ethereum-holesky-rpc.publicnode.com",
+            "network": "hoodi",
+            "ethereum_rpc": "https://ethereum-hoodi-rpc.publicnode.com/",
             "owners": [],
             "clusters": [
                 {
-                    "cluster_id": "0xde12c5ce1bc895c3ed8b81afcbbb55b3efff7ae9ebac5dbd2ebac3bd29474c09",
+                    "cluster_id": "0x0025347a086dc4576d34406c4f28aef122dd69592edcbc885312f06aaa6c0ba3",
                 }
             ],
         },
@@ -68,14 +68,17 @@ async def test_metrics(metrics_server: str) -> None:
                 sample = metric.samples[0]
                 assert (
                     sample.labels["cluster_id"]
-                    == "0xde12c5ce1bc895c3ed8b81afcbbb55b3efff7ae9ebac5dbd2ebac3bd29474c09"  # noqa: W503
+                    == "0x0025347a086dc4576d34406c4f28aef122dd69592edcbc885312f06aaa6c0ba3"  # noqa: W503
                 )
-                assert sample.labels["id"] == "1278541"
-                assert sample.labels["network"] == "holesky"
-                assert sample.labels["operators"] == "1092,1093,1094,1095"
+                assert (
+                    sample.labels["id"]
+                    == "0x0025347a086dc4576d34406c4f28aef122dd69592edcbc885312f06aaa6c0ba3-hoodi"
+                )
+                assert sample.labels["network"] == "hoodi"
+                assert sample.labels["operators"] == "52,55,57,59"
                 assert (
                     sample.labels["owner"]
-                    == "0xD4BB555d3B0D7fF17c606161B44E372689C14F4B"
+                    == "0x6f1Ae8C21e37034578A0252F7CC1b19DDe3472cb"
                 )
                 matched_metrics.add(metric.name)
             elif metric.name in (
@@ -84,7 +87,7 @@ async def test_metrics(metrics_server: str) -> None:
                 "ssv_liquidation_threshold_period",
             ):
                 sample = metric.samples[0]
-                assert sample.labels["network"] == "holesky"
+                assert sample.labels["network"] == "hoodi"
                 matched_metrics.add(metric.name)
     assert matched_metrics == {
         "ssv_cluster_validators_count",
